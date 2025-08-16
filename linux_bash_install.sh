@@ -195,6 +195,17 @@ sudo -u "$TARGET_USER" bash -lc 'solaar config "G502 LIGHTSPEED Wireless Gaming 
 msg "Installing UV for the user (via official script)"
 sudo -u "$TARGET_USER" bash -lc 'curl -LsSf https://astral.sh/uv/install.sh | sh || true'
 
+msg "Setting up uv run python main.py --config config.json for startup"
+sudo -u "$TARGET_USER" bash -lc 'mkdir -p ~/.config/autostart'
+sudo -u "$TARGET_USER" bash -lc 'cat > ~/.config/autostart/uv-python.desktop <<EOF
+[Desktop Entry]
+Type=Application
+Name=UV Python Main
+Exec=bash -c "cd ~/projects/phrase_gen_flow && uv run python main.py --config config.json"
+Terminal=false
+X-GNOME-Autostart-enabled=true
+EOF'
+
 msg "Audit: grep some keybindings"
 sudo -u "$TARGET_USER" XDG_RUNTIME_DIR="$RUNTIME_DIR" DBUS_SESSION_BUS_ADDRESS="$USER_BUS" DISPLAY="$DISPLAY_VAL" \
   bash -lc "gsettings list-recursively | grep -E '<Super>Tab|switch-group|switch-applications' || true"
