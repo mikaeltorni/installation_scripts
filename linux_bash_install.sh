@@ -1,0 +1,239 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+TARGET_USER="${SUDO_USER:-$USER}"
+TARGET_UID="$(id -u "$TARGET_USER")"
+RUNTIME_DIR="/run/user/${TARGET_UID}"
+DISPLAY_VAL="${DISPLAY:-:0}"
+USER_BUS="unix:path=${RUNTIME_DIR}/bus"
+SESSION_TYPE="$(loginctl show-session "$XDG_SESSION_ID" -p Type --value 2>/dev/null || echo "${XDG_SESSION_TYPE:-unknown}")"
+
+msg(){ printf "\n==> %s\n" "$*"; }
+need_cmd(){ command -v "$1" >/dev/null 2>&1; }
+
+gset(){
+  sudo -u "$TARGET_USER" \
+    XDG_RUNTIME_DIR="$RUNTIME_DIR" \
+    DBUS_SESSION_BUS_ADDRESS="$USER_BUS" \
+    DISPLAY="$DISPLAY_VAL" \
+    gsettings "$@"
+}
+
+if [ "$(id -u)" -ne 0 ]; then
+  echo "Please run with sudo: sudo bash $0"; exit 1
+fi
+if [ ! -S "${RUNTIME_DIR}/bus" ]; then
+  cat <<EOF
+No user session bus at ${RUNTIME_DIR}/bus.
+Open a terminal in ${TARGET_USER}'s *logged-in desktop* session and run:
+  sudo bash $0
+EOF
+  exit 1
+fi
+
+msg "Updating apt cache"
+apt update -y
+
+msg "Installing base utilities"
+apt install -y gnome-shell-extension-manager chrome-gnome-shell make gettext git curl gpg
+
+msg "Installing GNOME Tweaks and Startup Applications"
+apt install -y gnome-tweaks gnome-startup-applications
+
+if ! need_cmd google-chrome; then
+  msg "Installing Google Chrome (stable)"
+  install -m 0755 -d /etc/apt/keyrings
+  curl -fsSL https://dl.google.com/linux/linux_signing_key.pub | gpg --dearmor -o /etc/apt/keyrings/google-chrome.gpg
+  echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/google-chrome.gpg] https://dl.google.com/linux/chrome/deb/ stable main" > /etc/apt/sources.list.d/google-chrome.list
+  apt update -y
+  apt install -y google-chrome-stable
+fi
+
+msg "Installing snap applications"
+if ! need_cmd snap; then
+  apt install -y snapd
+fi
+
+snap install gitkraken --classic
+snap install spotify
+snap install discord
+
+msg "Enabling Night Light"
+gset set org.gnome.settings-daemon.plugins.color night-light-enabled true
+gset set org.gnome.settings-daemon.plugins.color night-light-temperature 3700
+gset set org.gnome.settings-daemon.plugins.color night-light-schedule-automatic true
+
+msg "Installing gnome-screenshot and binding Shift+Super+S"
+apt install -y gnome-screenshot
+BPATH_SS="/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom0/"
+gset set org.gnome.settings-daemon.plugins.media-keys custom-keybindings "['$BPATH_SS']"
+gset set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:$BPATH_SS name "'Area Screenshot to Clipboard'"
+gset set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:$BPATH_SS command "'gnome-screenshot --area --clipboard'"
+gset set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:$BPATH_SS binding "'<Shift><Super>s'"
+
+msg "Installing Dash to Panel"
+TMPDIR="$(mktemp -d)"
+git clone https://github.com/home-sweet-gnome/dash-to-panel.git "$TMPDIR/dash-to-panel"
+make -C "$TMPDIR/dash-to-panel" install
+rm -rf "$TMPDIR"
+
+msg "Enabling Dash to Panel and setting panel to bottom"
+sudo -u "$TARGET_USER" XDG_RUNTIME_DIR="$RUNTIME_DIR" DBUS_SESSION_BUS_ADDRESS="$USER_BUS" DISPLAY="$DISPLAY_VAL" \
+  gnome-extensions enable dash-to-panel@jderose9.github.com || true
+gset set org.gnome.shell.extensions.dash-to-panel panel-position 'BOTTOM'
+
+if [ "$SESSION_TYPE" = "wayland" ]; then
+  msg "Wayland detected → skip 'gnome-shell --replace'. Log out/in once to see the panel."
+else
+  msg "Xorg detected → you can press Alt+F2, type r, Enter to restart GNOME Shell."
+fi
+
+TERMINAL_DESKTOP="org.gnome.Terminal.desktop"
+[ -f /usr/share/applications/$TERMINAL_DESKTOP ] || TERMINAL_DESKTOP="org.gnome.Console.desktop"
+
+msg "Setting favorites on the taskbar"
+CURRENT_FAVS="$(sudo -u "$TARGET_USER" XDG_RUNTIME_DIR="$RUNTIME_DIR" DBUS_SESSION_BUS_ADDRESS="$USER_BUS" DISPLAY="$DISPLAY_VAL" gsettings get org.gnome.shell favorite-apps)"
+python3 - <<PY | sed -e "s/^/gset set org.gnome.shell favorite-apps '/" -e "s/$/'/" | bash
+import ast, os
+cur = ast.literal_eval("""$CURRENT_FAVS""")
+bad = ("firefox", "snap-store", "software", "yelp", "help")
+cur = [x for x in cur if all(b not in x.lower() for b in bad)]
+want = [
+  "org.gnome.SystemMonitor.desktop",
+  "$TERMINAL_DESKTOP",
+  "org.gnome.Settings.desktop",
+  "google-chrome.desktop",
+]
+for w in want:
+    if w not in cur:
+        cur.append(w)
+print(str(cur))
+PY
+
+msg "Applying workspace & UI keybindings"
+gset set org.gnome.desktop.wm.keybindings switch-to-workspace-1 "['<Super>less']"
+gset set org.gnome.desktop.wm.keybindings switch-to-workspace-2 "['<Super>Z']"
+gset set org.gnome.desktop.wm.keybindings switch-to-workspace-3 "['<Super>X']"
+gset set org.gnome.desktop.wm.keybindings switch-to-workspace-4 "['<Super>C']"
+gset set org.gnome.desktop.wm.keybindings switch-to-workspace-5 "['<Super>A']"
+gset set org.gnome.desktop.wm.keybindings switch-to-workspace-6 "['<Super>Q']"
+gset set org.gnome.desktop.wm.keybindings move-to-workspace-1 "['<Super><Shift>less']"
+gset set org.gnome.desktop.wm.keybindings move-to-workspace-2 "['<Super><Shift>z']"
+gset set org.gnome.desktop.wm.keybindings move-to-workspace-3 "['<Super><Shift>x']"
+gset set org.gnome.desktop.wm.keybindings move-to-workspace-4 "['<Super><Shift>c']"
+gset set org.gnome.desktop.wm.keybindings move-to-workspace-5 "['<Super><Shift>a']"
+gset set org.gnome.desktop.wm.keybindings move-to-workspace-6 "['<Super><Shift>q']"
+gset set org.gnome.shell.keybindings toggle-overview "['<Super>Tab']"
+gset set org.gnome.shell.keybindings toggle-application-view "[]"
+gset set org.gnome.shell.keybindings toggle-quick-settings "[]"
+gset set org.gnome.mutter overlay-key ''
+gset set org.gnome.desktop.interface enable-animations false
+
+msg "Installing Albert from OBS repo and enabling autostart"
+rm -f /etc/apt/sources.list.d/albert*.list
+rm -f /etc/apt/trusted.gpg.d/albert*.gpg /etc/apt/keyrings/albert-obs.gpg
+install -d -m 0755 /etc/apt/keyrings
+curl -fsSL https://download.opensuse.org/repositories/home:/manuelschneid3r/xUbuntu_24.04/Release.key \
+  | gpg --dearmor | tee /etc/apt/keyrings/albert-obs.gpg >/dev/null
+echo 'deb [signed-by=/etc/apt/keyrings/albert-obs.gpg] https://download.opensuse.org/repositories/home:/manuelschneid3r/xUbuntu_24.04/ /' \
+  > /etc/apt/sources.list.d/albert-obs.list
+apt update -y
+apt install -y albert
+
+sudo -u "$TARGET_USER" mkdir -p "/home/$TARGET_USER/.config/autostart"
+cp /usr/share/applications/albert.desktop "/home/$TARGET_USER/.config/autostart/" || true
+
+msg "Binding F19 to 'albert toggle'"
+EXIST_KEYS="$(sudo -u "$TARGET_USER" XDG_RUNTIME_DIR="$RUNTIME_DIR" DBUS_SESSION_BUS_ADDRESS="$USER_BUS" DISPLAY="$DISPLAY_VAL" gsettings get org.gnome.settings-daemon.plugins.media-keys custom-keybindings || echo "[]")"
+BPATH_AL="/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom1/"
+python3 - <<PY | sed -e "s/^/gset set org.gnome.settings-daemon.plugins.media-keys custom-keybindings '/" -e "s/$/'/" | bash
+import ast
+cur = ast.literal_eval("""$EXIST_KEYS""") if """$EXIST_KEYS""".strip() else []
+p = "/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom1/"
+if p not in cur: cur.append(p)
+print(str(cur))
+PY
+gset set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:$BPATH_AL name "'Albert Toggle'"
+gset set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:$BPATH_AL command "'albert toggle'"
+gset set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:$BPATH_AL binding "'F19'"
+
+msg "Installing keyd and applying your config (Caps->F19; Ctrl+Caps = CapsLock)"
+add-apt-repository -y ppa:keyd-team/ppa || true
+apt update -y
+apt install -y keyd
+cat >/etc/keyd/default.conf <<'KEYD'
+[ids]
+*
+
+[global]
+chord_timeout = 120
+
+[main]
+capslock = f19
+
+leftcontrol = layer(control)
+
+leftcontrol+capslock  = capslock
+rightcontrol+capslock = capslock
+KEYD
+systemctl enable --now keyd
+systemctl restart keyd
+
+msg "Installing optional xbindkeys fallback"
+apt install -y xbindkeys
+sudo -u "$TARGET_USER" bash -lc 'cat > ~/.xbindkeysrc <<XKC
+"albert toggle"
+  F19
+XKC'
+
+msg "Installing Solaar"
+apt install -y solaar
+sudo -u "$TARGET_USER" bash -lc 'mkdir -p ~/.config/autostart && cp /usr/share/applications/solaar.desktop ~/.config/autostart/ || true'
+sudo -u "$TARGET_USER" bash -lc 'solaar config "G502 LIGHTSPEED Wireless Gaming Mouse" dpi 1600 >/dev/null 2>&1 || true'
+sudo -u "$TARGET_USER" bash -lc 'solaar config "G502 LIGHTSPEED Wireless Gaming Mouse" onboard_profiles false >/dev/null 2>&1 || true'
+
+msg "Installing UV for the user (via official script)"
+sudo -u "$TARGET_USER" bash -lc 'curl -LsSf https://astral.sh/uv/install.sh | sh || true'
+
+msg "Audit: grep some keybindings"
+sudo -u "$TARGET_USER" XDG_RUNTIME_DIR="$RUNTIME_DIR" DBUS_SESSION_BUS_ADDRESS="$USER_BUS" DISPLAY="$DISPLAY_VAL" \
+  bash -lc "gsettings list-recursively | grep -E '<Super>Tab|switch-group|switch-applications' || true"
+sudo -u "$TARGET_USER" XDG_RUNTIME_DIR="$RUNTIME_DIR" DBUS_SESSION_BUS_ADDRESS="$USER_BUS" DISPLAY="$DISPLAY_VAL" \
+  bash -lc "gsettings list-recursively | grep '<Super>s' || true"
+
+if [[ "$SESSION_TYPE" =~ ^(x11|xorg)$ ]]; then
+  msg "Xorg: setting MAX refresh per monitor via xrandr (best effort)"
+  apt install -y x11-xserver-utils
+  sudo -u "$TARGET_USER" DISPLAY="$DISPLAY_VAL" bash -lc '
+    if command -v xrandr >/dev/null; then
+      while read -r out _ status _; do
+        [ "$status" = "connected" ] || continue
+        best_line=$(xrandr --query \
+          | awk -v o="$out" "
+              /^\"?\"?\"?\"?$/ {next}
+              \$0 ~ (\"^\" o \" \") {inblk=1; next}
+              inblk && /^[A-Za-z0-9-]+ connected/ {inblk=0}
+              inblk && /^[[:space:]]*[0-9]+x[0-9]+/ {
+                mode=\$1
+                for(i=2;i<=NF;i++){
+                  if(index(\$i,\"+\")||index(\$i,\"*\")||\$i ~ /^[0-9.]+$/){
+                    gsub(/[*+]/, \"\", \$i)
+                    rate=\$i
+                    printf(\"%s %s\\n\", mode, rate)
+                  }
+                }
+              }" \
+          | sort -k2,2nr -k1,1 | head -n1)
+        mode=${best_line% *}; rate=${best_line##* }
+        if [ -n "$mode" ] && [ -n "$rate" ]; then
+          xrandr --output "$out" --mode "$mode" --rate "$rate" || true
+        fi
+      done < <(xrandr --query | awk "/ connected/{print \$1, \$2}")
+    fi
+  '
+else
+  msg "Wayland: enabling VRR experimental feature (if supported)"
+  gset set org.gnome.mutter experimental-features "['variable-refresh-rate']"
+fi
+
+msg "Done. On Wayland, log out/in once so Dash to Panel fully appears."
