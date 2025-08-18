@@ -129,6 +129,9 @@ gset set org.gnome.shell.keybindings toggle-quick-settings "[]"
 gset set org.gnome.mutter overlay-key ''
 gset set org.gnome.desktop.interface enable-animations false
 
+# enable global workspaces across all monitors
+gsettings set org.gnome.mutter workspaces-only-on-primary false
+
 msg "Installing Albert from OBS repo and enabling autostart"
 rm -f /etc/apt/sources.list.d/albert*.list
 rm -f /etc/apt/trusted.gpg.d/albert*.gpg /etc/apt/keyrings/albert-obs.gpg
