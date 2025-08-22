@@ -322,4 +322,6 @@ nohup ~/.local/bin/gammastep-start >/dev/null 2>&1 &
 sleep 1
 pgrep -a gammastep || tail -n +1 ~/.local/share/gammastep-autostart.log
 
+sudo apt install remmina remmina-plugin-rdp remmina-plugin-secret -y
+
 msg "Done. On Wayland, log out/in once so Dash to Panel fully appears."
