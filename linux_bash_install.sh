@@ -326,4 +326,8 @@ sudo apt install remmina remmina-plugin-rdp remmina-plugin-secret -y
 
 sudo apt install tmux -y
 
+tmux set -g mouse on
+tmux set -g history-limit 200000
+tmux set -g mode-keys vi
+
 msg "Done. On Wayland, log out/in once so Dash to Panel fully appears."
