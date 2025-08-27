@@ -103,7 +103,7 @@ want = [
   "$TERMINAL_DESKTOP",
   "org.gnome.Settings.desktop",
   "google-chrome.desktop",
-]
+]wwer
 for w in want:
     if w not in cur:
         cur.append(w)
@@ -111,18 +111,19 @@ print(str(cur))
 PY
 
 msg "Applying workspace & UI keybindings"
-gset set org.gnome.desktop.wm.keybindings switch-to-workspace-1 "['<Super>less']"
-gset set org.gnome.desktop.wm.keybindings switch-to-workspace-2 "['<Super>Z']"
-gset set org.gnome.desktop.wm.keybindings switch-to-workspace-3 "['<Super>X']"
-gset set org.gnome.desktop.wm.keybindings switch-to-workspace-4 "['<Super>C']"
-gset set org.gnome.desktop.wm.keybindings switch-to-workspace-5 "['<Super>A']"
-gset set org.gnome.desktop.wm.keybindings switch-to-workspace-6 "['<Super>Q']"
+gset set org.gnome.desktop.wm.keybindings switch-to-workspace-1 "['<Super>Z']"
+gset set org.gnome.desktop.wm.keybindings switch-to-workspace-2 "['<Super>X']"
+gset set org.gnome.desktop.wm.keybindings switch-to-workspace-3 "['<Super>C']"
+gset set org.gnome.desktop.wm.keybindings switch-to-workspace-4 "['<Super>A']"
+gset set org.gnome.desktop.wm.keybindings switch-to-workspace-5 "['<Super>Q']"
+gset set org.gnome.desktop.wm.keybindings switch-to-workspace-6 "['<Super>W']"
 gset set org.gnome.desktop.wm.keybindings move-to-workspace-1 "['<Super><Shift>less']"
-gset set org.gnome.desktop.wm.keybindings move-to-workspace-2 "['<Super><Shift>z']"
-gset set org.gnome.desktop.wm.keybindings move-to-workspace-3 "['<Super><Shift>x']"
-gset set org.gnome.desktop.wm.keybindings move-to-workspace-4 "['<Super><Shift>c']"
-gset set org.gnome.desktop.wm.keybindings move-to-workspace-5 "['<Super><Shift>a']"
-gset set org.gnome.desktop.wm.keybindings move-to-workspace-6 "['<Super><Shift>q']"
+gset set org.gnome.desktop.wm.keybindings move-to-workspace-1 "['<Super><Shift>z']"
+gset set org.gnome.desktop.wm.keybindings move-to-workspace-2 "['<Super><Shift>x']"
+gset set org.gnome.desktop.wm.keybindings move-to-workspace-3 "['<Super><Shift>c']"
+gset set org.gnome.desktop.wm.keybindings move-to-workspace-4 "['<Super><Shift>a']"
+gset set org.gnome.desktop.wm.keybindings move-to-workspace-5 "['<Super><Shift>q']"
+gset set org.gnome.desktop.wm.keybindings move-to-workspace-6 "['<Super><Shift>w']"
 gset set org.gnome.shell.keybindings toggle-overview "['<Super>Tab']"
 gset set org.gnome.shell.keybindings toggle-application-view "[]"
 gset set org.gnome.shell.keybindings toggle-quick-settings "[]"
