@@ -11,12 +11,12 @@ SESSION_TYPE="$(loginctl show-session "$XDG_SESSION_ID" -p Type --value 2>/dev/n
 msg(){ printf "\n==> %s\n" "$*"; }
 need_cmd(){ command -v "$1" >/dev/null 2>&1; }
 
-gset(){
+gsettings(){
   sudo -u "$TARGET_USER" \
     XDG_RUNTIME_DIR="$RUNTIME_DIR" \
     DBUS_SESSION_BUS_ADDRESS="$USER_BUS" \
     DISPLAY="$DISPLAY_VAL" \
-    gsettings "$@"
+    gset "$@"
 }
 
 if [ "$(id -u)" -ne 0 ]; then
@@ -59,17 +59,17 @@ snap install spotify
 snap install discord
 
 msg "Enabling Night Light"
-gset set org.gnome.settings-daemon.plugins.color night-light-enabled true
-gset set org.gnome.settings-daemon.plugins.color night-light-temperature 3700
-gset set org.gnome.settings-daemon.plugins.color night-light-schedule-automatic true
+gsettings set org.gnome.settings-daemon.plugins.color night-light-enabled true
+gsettings set org.gnome.settings-daemon.plugins.color night-light-temperature 3700
+gsettings set org.gnome.settings-daemon.plugins.color night-light-schedule-automatic true
 
 msg "Installing gnome-screenshot and binding Shift+Super+S"
 apt install -y gnome-screenshot
 BPATH_SS="/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom0/"
-gset set org.gnome.settings-daemon.plugins.media-keys custom-keybindings "['$BPATH_SS']"
-gset set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:$BPATH_SS name "'Area Screenshot to Clipboard'"
-gset set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:$BPATH_SS command "'gnome-screenshot --area --clipboard'"
-gset set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:$BPATH_SS binding "'<Shift><Super>s'"
+gsettings set org.gnome.settings-daemon.plugins.media-keys custom-keybindings "['$BPATH_SS']"
+gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:$BPATH_SS name "'Area Screenshot to Clipboard'"
+gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:$BPATH_SS command "'gnome-screenshot --area --clipboard'"
+gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:$BPATH_SS binding "'<Shift><Super>s'"
 
 msg "Installing Dash to Panel"
 TMPDIR="$(mktemp -d)"
@@ -80,7 +80,7 @@ rm -rf "$TMPDIR"
 msg "Enabling Dash to Panel and setting panel to bottom"
 sudo -u "$TARGET_USER" XDG_RUNTIME_DIR="$RUNTIME_DIR" DBUS_SESSION_BUS_ADDRESS="$USER_BUS" DISPLAY="$DISPLAY_VAL" \
   gnome-extensions enable dash-to-panel@jderose9.github.com || true
-gset set org.gnome.shell.extensions.dash-to-panel panel-position 'BOTTOM'
+gsettings set org.gnome.shell.extensions.dash-to-panel panel-position 'BOTTOM'
 
 if [ "$SESSION_TYPE" = "wayland" ]; then
   msg "Wayland detected → skip 'gnome-shell --replace'. Log out/in once to see the panel."
@@ -92,8 +92,8 @@ TERMINAL_DESKTOP="org.gnome.Terminal.desktop"
 [ -f /usr/share/applications/$TERMINAL_DESKTOP ] || TERMINAL_DESKTOP="org.gnome.Console.desktop"
 
 msg "Setting favorites on the taskbar"
-CURRENT_FAVS="$(sudo -u "$TARGET_USER" XDG_RUNTIME_DIR="$RUNTIME_DIR" DBUS_SESSION_BUS_ADDRESS="$USER_BUS" DISPLAY="$DISPLAY_VAL" gsettings get org.gnome.shell favorite-apps)"
-python3 - <<PY | sed -e "s/^/gset set org.gnome.shell favorite-apps '/" -e "s/$/'/" | bash
+CURRENT_FAVS="$(sudo -u "$TARGET_USER" XDG_RUNTIME_DIR="$RUNTIME_DIR" DBUS_SESSION_BUS_ADDRESS="$USER_BUS" DISPLAY="$DISPLAY_VAL" gsettingstings get org.gnome.shell favorite-apps)"
+python3 - <<PY | sed -e "s/^/gsettings set org.gnome.shell favorite-apps '/" -e "s/$/'/" | bash
 import ast, os
 cur = ast.literal_eval("""$CURRENT_FAVS""")
 bad = ("firefox", "snap-store", "software", "yelp", "help")
@@ -111,28 +111,28 @@ print(str(cur))
 PY
 
 msg "Applying workspace & UI keybindings"
-gset set org.gnome.desktop.wm.keybindings switch-to-workspace-1 "['<Super>Z']"
-gset set org.gnome.desktop.wm.keybindings switch-to-workspace-2 "['<Super>X']"
-gset set org.gnome.desktop.wm.keybindings switch-to-workspace-3 "['<Super>C']"
-gset set org.gnome.desktop.wm.keybindings switch-to-workspace-4 "['<Super>A']"
-gset set org.gnome.desktop.wm.keybindings switch-to-workspace-5 "['<Super>Q']"
-gset set org.gnome.desktop.wm.keybindings switch-to-workspace-6 "['<Super>W']"
-gset set org.gnome.desktop.wm.keybindings switch-to-workspace-7 "['<Super>E']"
-gset set org.gnome.desktop.wm.keybindings switch-to-workspace-8 "['<Super>R']"
-gset set org.gnome.desktop.wm.keybindings move-to-workspace-1 "['<Super><Shift>less']"
-gset set org.gnome.desktop.wm.keybindings move-to-workspace-1 "['<Super><Shift>z']"
-gset set org.gnome.desktop.wm.keybindings move-to-workspace-2 "['<Super><Shift>x']"
-gset set org.gnome.desktop.wm.keybindings move-to-workspace-3 "['<Super><Shift>c']"
-gset set org.gnome.desktop.wm.keybindings move-to-workspace-4 "['<Super><Shift>a']"
-gset set org.gnome.desktop.wm.keybindings move-to-workspace-5 "['<Super><Shift>q']"
-gset set org.gnome.desktop.wm.keybindings move-to-workspace-6 "['<Super><Shift>w']"
-gset set org.gnome.desktop.wm.keybindings move-to-workspace-7 "['<Super><Shift>e']"
-gset set org.gnome.desktop.wm.keybindings move-to-workspace-8 "['<Super><Shift>r']"
-gset set org.gnome.shell.keybindings toggle-overview "['<Super>Tab']"
-gset set org.gnome.shell.keybindings toggle-application-view "[]"
-gset set org.gnome.shell.keybindings toggle-quick-settings "[]"
-gset set org.gnome.mutter overlay-key ''
-gset set org.gnome.desktop.interface enable-animations false
+gsettings set org.gnome.desktop.wm.keybindings switch-to-workspace-1 "['<Super>Z']"
+gsettings set org.gnome.desktop.wm.keybindings switch-to-workspace-2 "['<Super>X']"
+gsettings set org.gnome.desktop.wm.keybindings switch-to-workspace-3 "['<Super>C']"
+gsettings set org.gnome.desktop.wm.keybindings switch-to-workspace-4 "['<Super>A']"
+gsettings set org.gnome.desktop.wm.keybindings switch-to-workspace-5 "['<Super>Q']"
+gsettings set org.gnome.desktop.wm.keybindings switch-to-workspace-6 "['<Super>W']"
+gsettings set org.gnome.desktop.wm.keybindings switch-to-workspace-7 "['<Super>E']"
+gsettings set org.gnome.desktop.wm.keybindings switch-to-workspace-8 "['<Super>R']"
+gsettings set org.gnome.desktop.wm.keybindings move-to-workspace-1 "['<Super><Shift>less']"
+gsettings set org.gnome.desktop.wm.keybindings move-to-workspace-1 "['<Super><Shift>z']"
+gsettings set org.gnome.desktop.wm.keybindings move-to-workspace-2 "['<Super><Shift>x']"
+gsettings set org.gnome.desktop.wm.keybindings move-to-workspace-3 "['<Super><Shift>c']"
+gsettings set org.gnome.desktop.wm.keybindings move-to-workspace-4 "['<Super><Shift>a']"
+gsettings set org.gnome.desktop.wm.keybindings move-to-workspace-5 "['<Super><Shift>q']"
+gsettings set org.gnome.desktop.wm.keybindings move-to-workspace-6 "['<Super><Shift>w']"
+gsettings set org.gnome.desktop.wm.keybindings move-to-workspace-7 "['<Super><Shift>e']"
+gsettings set org.gnome.desktop.wm.keybindings move-to-workspace-8 "['<Super><Shift>r']"
+gsettings set org.gnome.shell.keybindings toggle-overview "['<Super>Tab']"
+gsettings set org.gnome.shell.keybindings toggle-application-view "[]"
+gsettings set org.gnome.shell.keybindings toggle-quick-settings "[]"
+gsettings set org.gnome.mutter overlay-key ''
+gsettings set org.gnome.desktop.interface enable-animations false
 
 # enable global workspaces across all monitors
 gsettings set org.gnome.mutter workspaces-only-on-primary false
@@ -154,16 +154,16 @@ cp /usr/share/applications/albert.desktop "/home/$TARGET_USER/.config/autostart/
 msg "Binding F19 to 'albert toggle'"
 EXIST_KEYS="$(sudo -u "$TARGET_USER" XDG_RUNTIME_DIR="$RUNTIME_DIR" DBUS_SESSION_BUS_ADDRESS="$USER_BUS" DISPLAY="$DISPLAY_VAL" gsettings get org.gnome.settings-daemon.plugins.media-keys custom-keybindings || echo "[]")"
 BPATH_AL="/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom1/"
-python3 - <<PY | sed -e "s/^/gset set org.gnome.settings-daemon.plugins.media-keys custom-keybindings '/" -e "s/$/'/" | bash
+python3 - <<PY | sed -e "s/^/gsettings set org.gnome.settings-daemon.plugins.media-keys custom-keybindings '/" -e "s/$/'/" | bash
 import ast
 cur = ast.literal_eval("""$EXIST_KEYS""") if """$EXIST_KEYS""".strip() else []
 p = "/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom1/"
 if p not in cur: cur.append(p)
 print(str(cur))
 PY
-gset set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:$BPATH_AL name "'Albert Toggle'"
-gset set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:$BPATH_AL command "'albert toggle'"
-gset set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:$BPATH_AL binding "'F19'"
+gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:$BPATH_AL name "'Albert Toggle'"
+gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:$BPATH_AL command "'albert toggle'"
+gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:$BPATH_AL binding "'F19'"
 
 msg "Installing keyd and applying your config (Caps->F19; Ctrl+Caps = CapsLock)"
 add-apt-repository -y ppa:keyd-team/ppa || true
@@ -252,7 +252,7 @@ if [[ "$SESSION_TYPE" =~ ^(x11|xorg)$ ]]; then
   '
 else
   msg "Wayland: enabling VRR experimental feature (if supported)"
-  gset set org.gnome.mutter experimental-features "['variable-refresh-rate']"
+  gsettings set org.gnome.mutter experimental-features "['variable-refresh-rate']"
 fi
 
 sudo apt install -y gammastep x11-xserver-utils desktop-file-utils
