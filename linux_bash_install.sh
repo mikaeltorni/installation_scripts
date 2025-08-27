@@ -111,6 +111,7 @@ print(str(cur))
 PY
 
 msg "Applying workspace & UI keybindings"
+gsettings set org.gnome.desktop.wm.preferences num-workspaces 8
 gsettings set org.gnome.desktop.wm.keybindings switch-to-workspace-1 "['<Super>Z']"
 gsettings set org.gnome.desktop.wm.keybindings switch-to-workspace-2 "['<Super>X']"
 gsettings set org.gnome.desktop.wm.keybindings switch-to-workspace-3 "['<Super>C']"
