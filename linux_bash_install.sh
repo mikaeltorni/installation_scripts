@@ -87,6 +87,8 @@ if [ "$SESSION_TYPE" = "wayland" ]; then
 else
   msg "Xorg detected → you can press Alt+F2, type r, Enter to restart GNOME Shell."
 fi
+# Set RTC to local time and adjust the system clock once
+sudo timedatectl set-local-rtc 1 --adjust-system-clock
 
 TERMINAL_DESKTOP="org.gnome.Terminal.desktop"
 [ -f /usr/share/applications/$TERMINAL_DESKTOP ] || TERMINAL_DESKTOP="org.gnome.Console.desktop"
