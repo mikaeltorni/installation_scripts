@@ -141,6 +141,74 @@ gsettings set org.gnome.desktop.interface enable-animations false
 gsettings set org.gnome.mutter workspaces-only-on-primary false
 
 gsettings set org.gnome.desktop.interface gtk-enable-primary-paste false
+# --- variables for safety (lets us run user commands even if the script runs with sudo)
+user="${SUDO_USER:-$USER}"
+
+# --- install dconf tools + build deps for xmousepasteblock (safe if already installed)
+sudo apt update
+sudo apt install -y dconf-cli dconf-service build-essential git libx11-dev libxi-dev libev-dev
+
+# --- ensure dconf profile exists and includes the system database "local"
+sudo install -d -m 0755 /etc/dconf/profile
+printf "user-db:user\nsystem-db:local\n" | sudo tee /etc/dconf/profile/user >/dev/null
+
+# --- create system dconf directories for overrides and locks
+sudo install -d -m 0755 /etc/dconf/db/local.d /etc/dconf/db/local.d/locks
+
+# --- set a persistent system default: disable GTK primary selection paste
+sudo tee /etc/dconf/db/local.d/00-primary-paste >/dev/null <<'EOF'
+[org/gnome/desktop/interface]
+gtk-enable-primary-paste=false
+EOF
+
+# --- lock the key so nothing can flip it back at login
+sudo tee /etc/dconf/db/local.d/locks/00-primary-paste >/dev/null <<'EOF'
+/org/gnome/desktop/interface/gtk-enable-primary-paste
+EOF
+
+# --- compile the system dconf database so overrides are picked up next session
+sudo dconf update
+
+# --- drop any per-user override so the locked system value applies (run as real user)
+sudo -u "$user" gsettings reset org.gnome.desktop.interface gtk-enable-primary-paste
+
+# --- (optional sanity check) print value and writability (should be "false" and "false")
+sudo -u "$user" gsettings get org.gnome.desktop.interface gtk-enable-primary-paste
+sudo -u "$user" gsettings writable org.gnome.desktop.interface gtk-enable-primary-paste
+
+# --- clone and build xmousepasteblock (blocks middle-click paste under X11/Xwayland only)
+install -d -m 0755 "/home/$user/src"
+sudo -u "$user" git clone https://github.com/milaq/xmousepasteblock "/home/$user/src/xmousepasteblock" || true
+cd "/home/$user/src/xmousepasteblock"
+sudo -u "$user" make
+sudo make install   # installs to /usr/bin/xmousepasteblock
+
+# --- create a per-user systemd unit to auto-start xmousepasteblock on login (X11/Xwayland)
+sudo -u "$user" install -d -m 0755 "/home/$user/.config/systemd/user"
+sudo -u "$user" tee "/home/$user/.config/systemd/user/xmousepasteblock.service" >/dev/null <<'EOF'
+[Unit]
+Description=block middle-click paste (x11)
+After=graphical-session.target
+PartOf=graphical-session.target
+
+[Service]
+ExecStart=/usr/bin/xmousepasteblock -t 200
+Restart=on-failure
+
+[Install]
+WantedBy=graphical-session.target
+EOF
+
+# --- reload user units and enable + start the service now
+sudo -u "$user" systemctl --user daemon-reload
+sudo -u "$user" systemctl --user enable --now xmousepasteblock.service
+
+# --- (optional) show service status once (should be "active (running)")
+sudo -u "$user" systemctl --user status --no-pager xmousepasteblock.service || true
+
+# --- final note: GTK apps pick up the dconf change on next login; Chrome/Discord are handled by xmousepasteblock immediately on X11/Xwayland
+echo "done. log out/in to guarantee GTK apps read the dconf default. chrome/discord paste is blocked via xmousepasteblock on x11."
+
 
 msg "Installing Albert from OBS repo and enabling autostart"
 rm -f /etc/apt/sources.list.d/albert*.list
