@@ -141,6 +141,113 @@ gsettings set org.gnome.desktop.interface enable-animations false
 gsettings set org.gnome.mutter workspaces-only-on-primary false
 
 gsettings set org.gnome.desktop.interface gtk-enable-primary-paste false
+# detect the real desktop user even if this script runs with sudo
+user="${SUDO_USER:-$USER}"
+home="$(getent passwd "$user" | cut -d: -f6)"
+
+# --- install tools and build deps ---
+# update apt cache
+sudo apt update
+# install dconf tools (for persistent GTK setting) + build deps for xmousepasteblock
+sudo apt install -y dconf-cli dconf-service build-essential git libx11-dev libxi-dev libev-dev
+
+# --- make GTK “primary paste” OFF system-wide (and locked) ---
+# ensure dconf profile exists and includes the system database
+sudo install -d -m 0755 /etc/dconf/profile
+printf "user-db:user\nsystem-db:local\n" | sudo tee /etc/dconf/profile/user >/dev/null
+# ensure override + lock directories exist
+sudo install -d -m 0755 /etc/dconf/db/local.d /etc/dconf/db/local.d/locks
+# write the override
+sudo tee /etc/dconf/db/local.d/00-primary-paste >/dev/null <<'EOF'
+[org/gnome/desktop/interface]
+gtk-enable-primary-paste=false
+EOF
+# lock the key so sessions/scripts can’t flip it back
+sudo tee /etc/dconf/db/local.d/locks/00-primary-paste >/dev/null <<'EOF'
+/org/gnome/desktop/interface/gtk-enable-primary-paste
+EOF
+# rebuild the system dconf database
+sudo dconf update
+# clear any per-user override so the locked system default applies
+sudo -u "$user" gsettings reset org.gnome.desktop.interface gtk-enable-primary-paste || true
+
+# --- build & install xmousepasteblock (kills MMB paste on X11/Xwayland apps) ---
+# create src dir and clone (safe if already exists)
+sudo -u "$user" install -d -m 0755 "$home/src"
+if [ ! -d "$home/src/xmousepasteblock/.git" ]; then
+  sudo -u "$user" git clone https://github.com/milaq/xmousepasteblock "$home/src/xmousepasteblock"
+fi
+# build from source
+cd "$home/src/xmousepasteblock"
+sudo -u "$user" make
+# install the binary to /usr/bin
+sudo install -m 0755 xmousepasteblock /usr/bin/xmousepasteblock
+
+# --- robust wrapper to avoid “Failed to connect to the X server” races ---
+# write wrapper that discovers DISPLAY/XAUTHORITY and waits for X, then runs the blocker
+sudo -u "$user" install -d -m 0755 "$home/.local/bin"
+sudo -u "$user" tee "$home/.local/bin/xmousepasteblock-wrapper" >/dev/null <<'EOF'
+#!/bin/sh
+set -eu
+# pick a DISPLAY (current, newest X socket, or :0)
+if [ -n "${DISPLAY:-}" ]; then
+  disp="$DISPLAY"
+else
+  sock="$(ls -1t /tmp/.X11-unix/X* 2>/dev/null | head -n1 || true)"
+  if [ -n "$sock" ]; then
+    n="${sock##*/X}"
+    disp=":$n"
+  else
+    disp=":0"
+  fi
+fi
+export DISPLAY="$disp"
+# pick an XAUTHORITY (GDM runtime or ~/.Xauthority)
+if [ -z "${XAUTHORITY:-}" ]; then
+  if [ -f "$XDG_RUNTIME_DIR/gdm/Xauthority" ]; then
+    export XAUTHORITY="$XDG_RUNTIME_DIR/gdm/Xauthority"
+  elif [ -f "$HOME/.Xauthority" ]; then
+    export XAUTHORITY="$HOME/.Xauthority"
+  fi
+fi
+# wait up to ~20s for the X socket to exist
+num="${disp#:}"
+for i in $(seq 1 80); do
+  [ -S "/tmp/.X11-unix/X${num}" ] && break
+  sleep 0.25
+done
+# run the blocker (tweak -t if you ever need it more aggressive)
+exec /usr/bin/xmousepasteblock -t 200
+EOF
+sudo -u "$user" chmod +x "$home/.local/bin/xmousepasteblock-wrapper"
+
+# --- per-user systemd unit to auto-start the blocker every login ---
+# write the user service
+sudo -u "$user" install -d -m 0755 "$home/.config/systemd/user"
+sudo -u "$user" tee "$home/.config/systemd/user/xmousepasteblock.service" >/dev/null <<'EOF'
+[Unit]
+Description=block middle-click paste (x11)
+After=graphical-session.target
+Wants=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/xmousepasteblock-wrapper
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=default.target
+EOF
+# allow user services to start at boot even before a TTY login
+sudo loginctl enable-linger "$user"
+# reload user units and enable + start now
+sudo -u "$user" systemctl --user daemon-reload
+sudo -u "$user" systemctl --user enable --now xmousepasteblock.service
+
+# --- optional quick verification (prints states; doesn’t fail the script) ---
+sudo -u "$user" systemctl --user is-enabled xmousepasteblock.service || true
+sudo -u "$user" systemctl --user is-active xmousepasteblock.service || true
 
 msg "Installing Albert from OBS repo and enabling autostart"
 rm -f /etc/apt/sources.list.d/albert*.list
